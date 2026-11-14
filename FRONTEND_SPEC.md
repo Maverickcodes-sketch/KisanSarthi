@@ -9,7 +9,7 @@ One document combining:
 
 **Roles:** `farmer`, `operator`, `admin`. **Auth:** JWT sent as `Authorization: Bearer <token>`.
 
-> **Sources and confidence.** Design tokens marked "Keyvo" were read from the exported Keyvo page. The export had no animation timing, so motion values here are **proposals**. Anything under "Proposal" is my suggestion, not Keyvo's. API details come from the routes document you shared. Hero animation timings come from the component code you supplied. Pages that need token/queue endpoints are marked **Blocked**.
+> **Sources and confidence.** Design tokens marked "Keyvo" were read from the exported Keyvo page. The export had no animation timing, so motion values here are **proposals**. Anything under "Proposal" is my suggestion, not Keyvo's. API details come from the routes document you shared. Hero animation timings come from the component code you supplied. Pages that still need token/queue endpoints are marked **Blocked**.
 
 ---
 
@@ -378,8 +378,8 @@ export default function AuthLayout({ eyebrow, title, panelTitle, panelText, chil
 | 13 | Admin: Operators | `/admin/operators` | Admin | Buildable now |
 | 14 | Not found | `*` | Public | Buildable now |
 | 15 | Forbidden | `/403` | Any | Buildable now |
-| 16 | Book a token | `/book` | Farmer | **Blocked** (needs token API) |
-| 17 | My tokens / live status | `/tokens`, `/tokens/:id` | Farmer | **Blocked** |
+| 16 | Book a token | `/book` | Farmer | Farmer token API implemented |
+| 17 | My tokens / live status | `/tokens`, `/tokens/:id` | Farmer | Token list API implemented; detail view is not |
 | 18 | Live queue board | `/centers/:id/queue` | Public | **Blocked** |
 | 19 | Operator queue console | `/operator/queue` | Operator | **Blocked** |
 | 20 | Walk-in desk | `/operator/walk-in` | Operator | **Blocked** |
@@ -801,7 +801,7 @@ Built from the "Card" by seoulchik on Uiverse.io that you supplied: a thick-bord
 | `/tokens/:id` | A single card scaled up (see 6.6) |
 | Landing page, Solution section | A **sample** card with demo data in place of a mockup |
 
-**Data needed:** the card is purely presentational, so you can build it now with mock data. Real data needs the token endpoints that are not mounted yet (blocked). The fields come from the queue logic: `tokenCode`, `status`, `position`, `aheadCount`, `estimatedWaitMinutes`, `nowServing`, `delayed`, plus the center, service, and counter names.
+**Data needed:** the card is purely presentational, so you can build it now with mock data. The farmer token endpoints are mounted; the fields come from the queue logic: `tokenCode`, `status`, `position`, `aheadCount`, `estimatedWaitMinutes`, `nowServing`, `delayed`, plus the center, service, and counter names.
 
 ### 6.2 Mapping the original card to a token
 

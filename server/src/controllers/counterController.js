@@ -1,9 +1,13 @@
 import Counter from "../models/Counter.js";
 import Service from "../models/Service.js";
 import ServiceCenter from "../models/ServiceCenter.js";
+import Token from "../models/Token.js";
+import TokenSequence from "../models/TokenSequence.js";
 import User from "../models/User.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import pick from "../utils/pick.js";
+import { getCounterQueue, recalculateCounterQueue } from "../services/queueService.js";
+import { getDateKey } from "../utils/dateKey.js";
 
 const FIELDS = ["name", "service", "operator"];
 
@@ -94,6 +98,135 @@ export const getOperators = asyncHandler(async (req, res) => {
 export const getMyCounter = asyncHandler(async (req, res) => {
   const counter = await Counter.findOne({ operator: req.user._id }).populate(POPULATE);
   res.json({ success: true, counter });
+});
+
+const getOperatorCounter = async (operatorId) =>
+  Counter.findOne({ operator: operatorId }).populate(POPULATE);
+
+const populateQueueToken = (token) =>
+  token.populate({ path: "farmer", select: "name phone" });
+
+const requireActiveCounter = async (req, res) => {
+  const counter = await Counter.findOne({ operator: req.user._id });
+  if (!counter) {
+    res.status(404);
+    throw new Error("No counter is assigned to this operator");
+  }
+  if (counter.status !== "active") {
+    res.status(400);
+    throw new Error("Counter must be active to manage the queue");
+  }
+  return counter;
+};
+
+// Operator: current serving token and waiting queue
+export const getMyQueue = asyncHandler(async (req, res) => {
+  const counter = await getOperatorCounter(req.user._id);
+  if (!counter) {
+    return res.json({ success: true, counter: null, serving: null, waiting: [] });
+  }
+
+  const { serving, waiting } = await getCounterQueue(counter._id);
+  await Promise.all([serving, ...waiting].filter(Boolean).map(populateQueueToken));
+  res.json({ success: true, counter, serving, waiting });
+});
+
+// Operator: move the next waiting token to serving
+export const callNextToken = asyncHandler(async (req, res) => {
+  const counter = await requireActiveCounter(req, res);
+  const dateKey = getDateKey();
+  const existingServing = await Token.exists({
+    counter: counter._id,
+    dateKey,
+    status: "serving",
+  });
+  if (existingServing) {
+    res.status(409);
+    throw new Error("Complete or skip the current token before calling the next one");
+  }
+
+  const serving = await Token.findOneAndUpdate(
+    { counter: counter._id, dateKey, status: "waiting" },
+    { $set: { status: "serving", calledAt: new Date(), servingStartedAt: new Date() } },
+    { new: true, sort: { queuedAt: 1, tokenNumber: 1 } }
+  );
+  if (serving) {
+    counter.currentToken = serving._id;
+    await counter.save();
+    await populateQueueToken(serving);
+  }
+  await recalculateCounterQueue(counter._id, dateKey);
+  res.json({ success: true, serving });
+});
+
+const finishServingToken = async (req, res, status) => {
+  const counter = await requireActiveCounter(req, res);
+  const token = await Token.findOne({
+    counter: counter._id,
+    dateKey: getDateKey(),
+    status: "serving",
+  });
+  if (!token) {
+    res.status(404);
+    throw new Error("There is no token currently being served");
+  }
+
+  if (status === "completed") {
+    token.status = "completed";
+    token.completedAt = new Date();
+  } else {
+    const { waiting } = await getCounterQueue(counter._id, token.dateKey);
+    const lastQueuedAt = waiting.at(-1)?.queuedAt?.getTime() ?? 0;
+    token.status = "waiting";
+    token.queuedAt = new Date(Math.max(Date.now(), lastQueuedAt + 1));
+    token.calledAt = undefined;
+    token.servingStartedAt = undefined;
+    token.skippedAt = new Date();
+    token.skipCount += 1;
+  }
+  await token.save();
+
+  counter.currentToken = null;
+  await counter.save();
+  await recalculateCounterQueue(counter._id, token.dateKey);
+  await populateQueueToken(token);
+  res.json({ success: true, token });
+};
+
+export const completeServingToken = asyncHandler((req, res) =>
+  finishServingToken(req, res, "completed")
+);
+
+export const skipServingToken = asyncHandler((req, res) =>
+  finishServingToken(req, res, "skipped")
+);
+
+// Operator: issue a ticket for a walk-in farmer
+export const createWalkInToken = asyncHandler(async (req, res) => {
+  const counter = await requireActiveCounter(req, res);
+  const dateKey = getDateKey();
+  const sequence = await TokenSequence.findOneAndUpdate(
+    { center: counter.center, dateKey },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  const tokenNumber = sequence.seq;
+  const token = await Token.create({
+    tokenNumber,
+    tokenCode: String(tokenNumber).padStart(3, "0"),
+    dateKey,
+    center: counter.center,
+    service: counter.service,
+    counter: counter._id,
+    walkInName: req.body.walkInName.trim(),
+    walkInPhone: req.body.walkInPhone?.trim(),
+    source: "walk_in",
+    createdBy: req.user._id,
+  });
+
+  await recalculateCounterQueue(counter._id, dateKey);
+  await populateQueueToken(token);
+  res.status(201).json({ success: true, token });
 });
 
 // Admin: create counter
