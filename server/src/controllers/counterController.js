@@ -2,18 +2,18 @@ import Counter from "../models/Counter.js";
 import Service from "../models/Service.js";
 import ServiceCenter from "../models/ServiceCenter.js";
 import Token from "../models/Token.js";
-import TokenSequence from "../models/TokenSequence.js";
 import User from "../models/User.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import pick from "../utils/pick.js";
 import { getCounterQueue, recalculateCounterQueue } from "../services/queueService.js";
 import { getDateKey } from "../utils/dateKey.js";
+import { getNextTokenNumber } from "../utils/nextTokenNumber.js";
 
 const FIELDS = ["name", "service", "operator"];
 
 const POPULATE = [
   { path: "center", select: "name district" },
-  { path: "service", select: "name estimatedDuration" },
+  { path: "service", select: "name estimatedDuration averageDuration completedServiceCount" },
   { path: "operator", select: "name email phone" },
 ];
 
@@ -172,8 +172,16 @@ const finishServingToken = async (req, res, status) => {
   }
 
   if (status === "completed") {
+    const completedAt = new Date();
+    const startedAt = token.servingStartedAt || token.calledAt;
+    const actualMinutes = startedAt
+      ? (completedAt.getTime() - new Date(startedAt).getTime()) / 60000
+      : null;
     token.status = "completed";
-    token.completedAt = new Date();
+    token.completedAt = completedAt;
+    if (actualMinutes !== null && actualMinutes > 0 && actualMinutes <= 240) {
+      token.actualServiceMinutes = Math.max(0.01, Number(actualMinutes.toFixed(2)));
+    }
   } else {
     const { waiting } = await getCounterQueue(counter._id, token.dateKey);
     const lastQueuedAt = waiting.at(-1)?.queuedAt?.getTime() ?? 0;
@@ -185,6 +193,28 @@ const finishServingToken = async (req, res, status) => {
     token.skipCount += 1;
   }
   await token.save();
+
+  if (status === "completed" && token.actualServiceMinutes !== null) {
+    const service = await Service.findById(token.service);
+    if (!service) {
+      res.status(404);
+      throw new Error("Service not found for completed token");
+    }
+
+    const previousAverage =
+      service.averageDuration || token.estimatedServiceMinutes || service.estimatedDuration;
+    const alpha = 0.3;
+    service.averageDuration =
+      service.completedServiceCount > 0
+        ? Math.max(
+            1,
+            alpha * token.actualServiceMinutes + (1 - alpha) * previousAverage
+          )
+        : Math.max(1, token.actualServiceMinutes);
+    service.completedServiceCount = (service.completedServiceCount || 0) + 1;
+    service.durationStatsUpdatedAt = token.completedAt;
+    await service.save();
+  }
 
   counter.currentToken = null;
   await counter.save();
@@ -205,12 +235,13 @@ export const skipServingToken = asyncHandler((req, res) =>
 export const createWalkInToken = asyncHandler(async (req, res) => {
   const counter = await requireActiveCounter(req, res);
   const dateKey = getDateKey();
-  const sequence = await TokenSequence.findOneAndUpdate(
-    { center: counter.center, dateKey },
-    { $inc: { seq: 1 } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  );
-  const tokenNumber = sequence.seq;
+  const service = await Service.findById(counter.service);
+  if (!service || !service.isActive) {
+    res.status(400);
+    throw new Error("The service for this counter is unavailable");
+  }
+
+  const tokenNumber = await getNextTokenNumber(counter.center, dateKey);
   const token = await Token.create({
     tokenNumber,
     tokenCode: String(tokenNumber).padStart(3, "0"),
@@ -222,6 +253,7 @@ export const createWalkInToken = asyncHandler(async (req, res) => {
     walkInPhone: req.body.walkInPhone?.trim(),
     source: "walk_in",
     createdBy: req.user._id,
+    estimatedServiceMinutes: service.averageDuration || service.estimatedDuration,
   });
 
   await recalculateCounterQueue(counter._id, dateKey);
@@ -269,6 +301,7 @@ export const updateCounter = asyncHandler(async (req, res) => {
 
   Object.assign(counter, changes);
   await counter.save();
+  await recalculateCounterQueue(counter._id);
   await counter.populate(POPULATE);
 
   res.json({ success: true, counter });
@@ -301,6 +334,7 @@ export const updateCounterStatus = asyncHandler(async (req, res) => {
 
   counter.status = status;
   await counter.save();
+  await recalculateCounterQueue(counter._id);
   await counter.populate(POPULATE);
 
   res.json({ success: true, counter });

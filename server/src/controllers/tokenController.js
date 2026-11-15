@@ -1,9 +1,9 @@
 import Service from "../models/Service.js";
 import ServiceCenter from "../models/ServiceCenter.js";
 import Token, { ACTIVE_STATUSES } from "../models/Token.js";
-import TokenSequence from "../models/TokenSequence.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { getDateKey } from "../utils/dateKey.js";
+import { getNextTokenNumber } from "../utils/nextTokenNumber.js";
 import {
   getTokenQueueInfo,
   pickCounter,
@@ -49,12 +49,7 @@ export const createToken = asyncHandler(async (req, res) => {
     throw new Error("No active counter is available for this service");
   }
 
-  const sequence = await TokenSequence.findOneAndUpdate(
-    { center: center._id, dateKey },
-    { $inc: { seq: 1 } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  );
-  const tokenNumber = sequence.seq;
+  const tokenNumber = await getNextTokenNumber(center._id, dateKey);
   let token;
   try {
     token = await Token.create({
@@ -66,6 +61,7 @@ export const createToken = asyncHandler(async (req, res) => {
       counter: counter._id,
       farmer: req.user._id,
       source: "online",
+      estimatedServiceMinutes: service.averageDuration || service.estimatedDuration,
     });
   } catch (error) {
     if (error.code === 11000 && error.keyPattern?.farmer) {
@@ -78,6 +74,9 @@ export const createToken = asyncHandler(async (req, res) => {
   await recalculateCounterQueue(counter._id, dateKey);
   const queueInfo = await getTokenQueueInfo(token);
   token.estimatedWaitMinutes = queueInfo.estimatedWaitMinutes;
+  token.estimatedStartAt = queueInfo.estimatedStartAt;
+  token.estimatedCompletionAt = queueInfo.estimatedCompletionAt;
+  token.etaUpdatedAt = queueInfo.etaUpdatedAt;
   await populateToken(token);
 
   res.status(201).json({
