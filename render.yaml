@@ -17,7 +17,7 @@ services:
         fromService:
           type: web
           name: kisansathi-client
-          property: url
+          property: host
 
   - type: web
     name: kisansathi-client
@@ -30,7 +30,7 @@ services:
         fromService:
           type: web
           name: kisansathi-api
-          property: url
+          property: host
     routes:
       - type: rewrite
         source: /*

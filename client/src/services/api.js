@@ -1,8 +1,10 @@
 import axios from "axios";
 
 const apiOrigin = import.meta.env.VITE_API_ORIGIN;
+const normalizedApiOrigin =
+  apiOrigin && (/^https?:\/\//i.test(apiOrigin) ? apiOrigin : `https://${apiOrigin}`);
 const baseURL = apiOrigin
-  ? `${apiOrigin.replace(/\/$/, "")}/api`
+  ? `${normalizedApiOrigin.replace(/\/$/, "")}/api`
   : import.meta.env.VITE_API_URL || "/api";
 
 const api = axios.create({
