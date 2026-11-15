@@ -66,6 +66,15 @@ In a second terminal:
 
 The app runs at http://localhost:5173.
 
+## Deploy to Render
+
+1. Push the repository to GitHub and create a new Blueprint on Render using the repository's `render.yaml`.
+2. Set `MONGO_URI` to your MongoDB Atlas connection string and `JWT_SECRET` to a long, random secret when prompted. Ensure your Atlas network access rules allow connections from Render.
+3. Deploy both services. The Blueprint connects the static client to the API and configures the API's CORS origin automatically.
+4. Once deployed, seed demo data from the server service's Shell with `npm run seed` if needed.
+
+The client is deployed as a static site with SPA routing enabled. The API health check is available at `/api/health`.
+
 ## Demo Accounts
 
 | Role | Login | Password |
