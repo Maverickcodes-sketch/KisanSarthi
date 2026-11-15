@@ -1,11 +1,18 @@
 import axios from "axios";
 
-const apiOrigin = import.meta.env.VITE_API_ORIGIN;
-const normalizedApiOrigin =
-  apiOrigin && (/^https?:\/\//i.test(apiOrigin) ? apiOrigin : `https://${apiOrigin}`);
-const baseURL = apiOrigin
-  ? `${normalizedApiOrigin.replace(/\/$/, "")}/api`
-  : import.meta.env.VITE_API_URL || "/api";
+const configuredApiUrl =
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_ORIGIN;
+const apiUrl = configuredApiUrl?.trim();
+const apiUrlWithProtocol =
+  apiUrl && !apiUrl.startsWith("/") && !/^https?:\/\//i.test(apiUrl)
+    ? `https://${apiUrl}`
+    : apiUrl;
+const apiUrlWithoutTrailingSlash = apiUrlWithProtocol?.replace(/\/+$/, "");
+const baseURL = apiUrlWithoutTrailingSlash
+  ? /\/api$/i.test(apiUrlWithoutTrailingSlash)
+    ? apiUrlWithoutTrailingSlash
+    : `${apiUrlWithoutTrailingSlash}/api`
+  : "/api";
 
 const api = axios.create({
   baseURL,
