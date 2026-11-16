@@ -34,6 +34,10 @@ Open `server/.env` and fill in:
 
       node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
+- `AUTH_PAYLOAD_PRIVATE_KEY_BASE64` (optional): a base64-encoded RSA private key for decrypting login and registration requests. If omitted, the server generates an in-memory key on startup. For multiple server instances, generate one shared value with the command below and configure it on every instance:
+
+      node --input-type=module -e "import { generateKeyPairSync } from 'node:crypto'; const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } }); console.log(Buffer.from(privateKey).toString('base64'));"
+
 Never commit `.env`.
 
 ### 2. Demo data
@@ -74,6 +78,13 @@ The app runs at http://localhost:5173.
 4. Once deployed, seed demo data from the server service's Shell with `npm run seed` if needed.
 
 The client is deployed as a static site with SPA routing enabled. The API health check is available at `/api/health`.
+Render serves both services over HTTPS. The client refuses API requests to non-local HTTP endpoints, so keep `VITE_API_ORIGIN` pointed at the HTTPS API URL.
+
+## Password transport and storage
+
+Login and registration encrypt their JSON payload in the browser with AES-GCM and wrap the one-time encryption key using the API's RSA public key. The server decrypts the payload before validation and hashes passwords with bcrypt before storing them. The DevTools Network panel therefore shows an encrypted envelope instead of the original request body.
+
+This only obscures the request body shown in the Network panel; it cannot prevent someone with access to the browser from inspecting the password before encryption or modifying the client. HTTPS remains required for production transport. Local development uses HTTP only on `localhost`.
 
 ## Demo Accounts
 

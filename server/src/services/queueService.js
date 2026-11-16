@@ -107,7 +107,12 @@ export const getTokenQueueInfo = async (token) => {
 };
 
 export const pickCounter = async (centerId, serviceId, dateKey = getDateKey()) => {
-  const counters = await Counter.find({ center: centerId, service: serviceId, status: "active" });
+  const counters = await Counter.find({
+    center: centerId,
+    service: serviceId,
+    status: "active",
+    operator: { $ne: null },
+  });
   if (counters.length === 0) return null;
 
   const loads = await Token.aggregate([

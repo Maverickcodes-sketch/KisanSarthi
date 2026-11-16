@@ -46,7 +46,7 @@ export const createToken = asyncHandler(async (req, res) => {
   const counter = await pickCounter(center._id, service._id, dateKey);
   if (!counter) {
     res.status(400);
-    throw new Error("No active counter is available for this service");
+    throw new Error("No staffed active counter is available for this service");
   }
 
   const tokenNumber = await getNextTokenNumber(center._id, dateKey);

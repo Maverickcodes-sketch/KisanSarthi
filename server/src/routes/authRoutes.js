@@ -3,6 +3,10 @@ import { body } from "express-validator";
 import { register, login, getMe } from "../controllers/authController.js";
 import { validate } from "../middleware/validate.js";
 import { protect } from "../middleware/authMiddleware.js";
+import {
+  authPayloadPublicKey,
+  decryptAuthPayload,
+} from "../utils/authPayloadEncryption.js";
 
 const router = Router();
 
@@ -27,8 +31,13 @@ const loginRules = [
   body("password").notEmpty().withMessage("Password is required"),
 ];
 
-router.post("/register", registerRules, validate, register);
-router.post("/login", loginRules, validate, login);
+router.get("/encryption-key", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ success: true, publicKey: authPayloadPublicKey });
+});
+
+router.post("/register", decryptAuthPayload, registerRules, validate, register);
+router.post("/login", decryptAuthPayload, loginRules, validate, login);
 
 router.get("/me", protect, getMe);
 

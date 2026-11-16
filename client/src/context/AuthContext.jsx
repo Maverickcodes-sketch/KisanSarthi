@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import api from "../services/api";
+import { encryptAuthPayload } from "../services/authPayloadEncryption";
 
 const TOKEN_KEY = "kisansathi_token";
 const AuthContext = createContext(null);
@@ -19,14 +20,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (identifier, password) => {
-    const { data } = await api.post("/auth/login", { identifier, password });
+    const payload = await encryptAuthPayload({ identifier, password });
+    const { data } = await api.post("/auth/login", payload);
     localStorage.setItem(TOKEN_KEY, data.token);
     setUser(data.user);
     return data.user;
   };
 
   const register = async (payload) => {
-    const { data } = await api.post("/auth/register", payload);
+    const encryptedPayload = await encryptAuthPayload(payload);
+    const { data } = await api.post("/auth/register", encryptedPayload);
     localStorage.setItem(TOKEN_KEY, data.token);
     setUser(data.user);
     return data.user;
