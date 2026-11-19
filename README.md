@@ -102,3 +102,5 @@ Farmers can register from the app.
 - Work on your own branch: `git checkout -b feature/your-feature-name`
 - Commit small changes with clear messages, then push your branch and open a pull request.
 - Never commit `.env` or any secrets.
+
+🚀 **Live Demo:** [Click Here](https://kisan-sarthi-beryl.vercel.app/)
