@@ -328,7 +328,7 @@ This project was developed as a collaborative academic project.
 | --- |
 | Tanya Vaish |
 | Teena Yadav |
-| Shashwat Mishra |
+| Shaswat Mishra |
 | Saumya Tiwari |
 
 ---
